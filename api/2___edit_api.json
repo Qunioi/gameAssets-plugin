@@ -1,0 +1,390 @@
+{
+  "2": {
+    "inputs": {
+      "lora_name": "Qwen-Image-Edit-2511-8steps-fp32.safetensors",
+      "strength_model": 1,
+      "model": [
+        "164",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "LoRA加载器(仅模型)"
+    }
+  },
+  "5": {
+    "inputs": {
+      "clip_name": "qwen_2.5_vl_7b_fp8_scaled.safetensors",
+      "type": "qwen_image",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "CLIP加载器"
+    }
+  },
+  "6": {
+    "inputs": {
+      "shift": 3,
+      "sampling": "flow",
+      "model": [
+        "2",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingAuraFlow",
+    "_meta": {
+      "title": "模型采样算法AuraFlow"
+    }
+  },
+  "7": {
+    "inputs": {
+      "strength": 1.0000000000000002,
+      "pre_cfg": false,
+      "model": [
+        "6",
+        0
+      ]
+    },
+    "class_type": "CFGNorm",
+    "_meta": {
+      "title": "CFGNorm"
+    }
+  },
+  "8": {
+    "inputs": {
+      "vae_name": "qwen_image_vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "VAE加载器"
+    }
+  },
+  "15": {
+    "inputs": {
+      "seed": 969003519544557,
+      "steps": 8,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "7",
+        0
+      ],
+      "positive": [
+        "325",
+        0
+      ],
+      "negative": [
+        "325",
+        1
+      ],
+      "latent_image": [
+        "325",
+        2
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "K采样器"
+    }
+  },
+  "18": {
+    "inputs": {
+      "samples": [
+        "297",
+        0
+      ],
+      "vae": [
+        "8",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE解码"
+    }
+  },
+  "25": {
+    "inputs": {
+      "prompt": "參考圖一是原圖，參考圖二是黑白遮罩：白色為編輯範圍，黑色為保留範圍。移除白色範圍內的文字標題與文字背景，以周圍材質、光線與背景自然修補。不要將黑白遮罩畫進結果；保留範圍外的構圖、特徵與顏色。",
+      "clip": [
+        "5",
+        0
+      ],
+      "vae": [
+        "8",
+        0
+      ],
+      "image1": [
+        "285",
+        0
+      ],
+      "image2": [
+        "321",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "TextEncodeQwenImageEditPlus"
+    }
+  },
+  "325": {
+    "inputs": {
+      "noise_mask": true,
+      "positive": [
+        "254",
+        0
+      ],
+      "negative": [
+        "255",
+        0
+      ],
+      "vae": [
+        "8",
+        0
+      ],
+      "pixels": [
+        "285",
+        0
+      ],
+      "mask": [
+        "322",
+        0
+      ]
+    },
+    "class_type": "InpaintModelConditioning",
+    "_meta": {
+      "title": "真正的遮罩修補：讓取樣過程本身只在遮罩範圍內生成，取代原本生成整張圖再事後合成的做法"
+    }
+  },
+  "164": {
+    "inputs": {
+      "unet_name": "qwen-image-edit-2511-Q8.gguf"
+    },
+    "class_type": "UnetLoaderGGUF",
+    "_meta": {
+      "title": "UnetLoaderGGUF"
+    }
+  },
+  "187": {
+    "inputs": {
+      "conditioning": [
+        "25",
+        0
+      ]
+    },
+    "class_type": "ConditioningZeroOut",
+    "_meta": {
+      "title": "条件零化"
+    }
+  },
+  "225": {
+    "inputs": {
+      "rgthree_comparer": {
+        "images": []
+      },
+      "image_a": [
+        "285",
+        0
+      ],
+      "image_b": [
+        "323",
+        0
+      ]
+    },
+    "class_type": "Image Comparer (rgthree)",
+    "_meta": {
+      "title": "图像对比"
+    }
+  },
+  "254": {
+    "inputs": {
+      "reference_latents_method": "index_timestep_zero",
+      "conditioning": [
+        "25",
+        0
+      ]
+    },
+    "class_type": "FluxKontextMultiReferenceLatentMethod",
+    "_meta": {
+      "title": "Edit Model Reference Method"
+    }
+  },
+  "255": {
+    "inputs": {
+      "reference_latents_method": "index_timestep_zero",
+      "conditioning": [
+        "187",
+        0
+      ]
+    },
+    "class_type": "FluxKontextMultiReferenceLatentMethod",
+    "_meta": {
+      "title": "Edit Model Reference Method"
+    }
+  },
+  "271": {
+    "inputs": {
+      "images": [
+        "285",
+        0
+      ]
+    },
+    "class_type": "PreviewImage",
+    "_meta": {
+      "title": "预览图像"
+    }
+  },
+  "285": {
+    "inputs": {
+      "width": 1024,
+      "height": 1024,
+      "upscale_method": "lanczos",
+      "keep_proportion": "pad",
+      "pad_color": "0, 0, 0",
+      "crop_position": "center",
+      "divisible_by": 2,
+      "device": "cpu",
+      "image": [
+        "306",
+        0
+      ],
+      "mask": [
+        "324",
+        0
+      ]
+    },
+    "class_type": "ImageResizeKJv2",
+    "_meta": {
+      "title": "Resize Image v2"
+    }
+  },
+  "297": {
+    "inputs": {
+      "anything": [
+        "15",
+        0
+      ]
+    },
+    "class_type": "easy cleanGpuUsed",
+    "_meta": {
+      "title": "清理GPU占用"
+    }
+  },
+  "306": {
+    "inputs": {
+      "image": "main.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像"
+    }
+  },
+  "318": {
+    "inputs": {
+      "image": "mask.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "上傳 mask.png 黑白遮罩"
+    }
+  },
+  "319": {
+    "inputs": {
+      "filename_prefix": "1_edit",
+      "images": [
+        "323",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "保存图像"
+    }
+  },
+  "320": {
+    "inputs": {
+      "mask": [
+        "324",
+        0
+      ]
+    },
+    "class_type": "MaskToImage",
+    "_meta": {
+      "title": "遮罩轉圖像（供縮放對齊用）"
+    }
+  },
+  "321": {
+    "inputs": {
+      "width": 1024,
+      "height": 1024,
+      "upscale_method": "lanczos",
+      "keep_proportion": "pad",
+      "pad_color": "0, 0, 0",
+      "crop_position": "center",
+      "divisible_by": 2,
+      "device": "cpu",
+      "image": [
+        "320",
+        0
+      ]
+    },
+    "class_type": "ImageResizeKJv2",
+    "_meta": {
+      "title": "遮罩縮放（跟節點285用同一套參數，確保對齊）"
+    }
+  },
+  "322": {
+    "inputs": {
+      "image": [
+        "321",
+        0
+      ],
+      "channel": "red"
+    },
+    "class_type": "ImageToMask",
+    "_meta": {
+      "title": "圖像轉回遮罩"
+    }
+  },
+  "323": {
+    "inputs": {
+      "destination": [
+        "285",
+        0
+      ],
+      "source": [
+        "18",
+        0
+      ],
+      "x": 0,
+      "y": 0,
+      "resize_source": false,
+      "mask": [
+        "322",
+        0
+      ]
+    },
+    "class_type": "ImageCompositeMasked",
+    "_meta": {
+      "title": "只在選取範圍內套用生成結果，範圍外保留原圖"
+    }
+  },
+  "324": {
+    "inputs": {
+      "image": [
+        "318",
+        0
+      ],
+      "channel": "red"
+    },
+    "class_type": "ImageToMask",
+    "_meta": {
+      "title": "黑白遮罩：白色編輯、黑色保留"
+    }
+  }
+}

@@ -1,0 +1,455 @@
+{
+  "5": {
+    "inputs": {
+      "clip_name": "qwen_2.5_vl_7b_fp8_scaled.safetensors",
+      "type": "qwen_image",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "CLIP加载器"
+    }
+  },
+  "8": {
+    "inputs": {
+      "vae_name": "qwen_image_vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "VAE加载器"
+    }
+  },
+  "113": {
+    "inputs": {
+      "unet_name": "qwen-image-Q8_0.gguf"
+    },
+    "class_type": "UnetLoaderGGUF",
+    "_meta": {
+      "title": "UnetLoaderGGUF"
+    }
+  },
+  "114": {
+    "inputs": {
+      "shift": 3,
+      "model": [
+        "115",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingAuraFlow",
+    "_meta": {
+      "title": "模型采样算法AuraFlow"
+    }
+  },
+  "115": {
+    "inputs": {
+      "lora_name": "Qwen-Image-2512-Lightning-8steps-V1.0-fp32.safetensors",
+      "strength_model": 1,
+      "model": [
+        "113",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "LoRA加载器(仅模型)"
+    }
+  },
+  "122": {
+    "inputs": {
+      "control_net_name": "InstantX_Qwen-Image-ControlNet-Inpainting.safetensors"
+    },
+    "class_type": "ControlNetLoader",
+    "_meta": {
+      "title": "ControlNet加载器"
+    }
+  },
+  "144": {
+    "inputs": {
+      "image": "input.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "加载图像"
+    }
+  },
+  "184": {
+    "inputs": {
+      "invert_mask": true,
+      "top": [
+        "232",
+        0
+      ],
+      "bottom": [
+        "231",
+        0
+      ],
+      "left": [
+        "230",
+        0
+      ],
+      "right": [
+        "229",
+        0
+      ],
+      "color": "#000000",
+      "image": [
+        "243",
+        0
+      ]
+    },
+    "class_type": "LayerUtility: ExtendCanvasV2",
+    "_meta": {
+      "title": "LayerUtility: ExtendCanvas V2"
+    }
+  },
+  "185": {
+    "inputs": {
+      "aspect_ratio": "custom",
+      "proportional_width": 1344,
+      "proportional_height": 1024,
+      "fit": "letterbox",
+      "method": "lanczos",
+      "round_to_multiple": "8",
+      "scale_to_side": "width",
+      "scale_to_length": 1344,
+      "background_color": "#000000",
+      "image": [
+        "184",
+        0
+      ],
+      "mask": [
+        "184",
+        1
+      ]
+    },
+    "class_type": "LayerUtility: ImageScaleByAspectRatio V2",
+    "_meta": {
+      "title": "按宽高比缩放_V2"
+    }
+  },
+  "186": {
+    "inputs": {
+      "mask": [
+        "185",
+        1
+      ]
+    },
+    "class_type": "InvertMask",
+    "_meta": {
+      "title": "遮罩反转"
+    }
+  },
+  "244": {
+    "inputs": {
+      "destination": [
+        "186",
+        0
+      ],
+      "source": [
+        "144",
+        1
+      ],
+      "x": 0,
+      "y": 0,
+      "operation": "add"
+    },
+    "class_type": "MaskComposite",
+    "_meta": {
+      "title": "合併透明區與延伸遮罩"
+    }
+  },
+  "187": {
+    "inputs": {
+      "expand": 20,
+      "tapered_corners": true,
+      "mask": [
+        "244",
+        0
+      ]
+    },
+    "class_type": "GrowMask",
+    "_meta": {
+      "title": "遮罩扩展"
+    }
+  },
+  "188": {
+    "inputs": {
+      "amount": 40,
+      "device": "auto",
+      "mask": [
+        "187",
+        0
+      ]
+    },
+    "class_type": "MaskBlur+",
+    "_meta": {
+      "title": "遮罩模糊"
+    }
+  },
+  "189": {
+    "inputs": {
+      "samples": [
+        "195",
+        0
+      ],
+      "mask": [
+        "188",
+        0
+      ]
+    },
+    "class_type": "SetLatentNoiseMask",
+    "_meta": {
+      "title": "设置Latent噪波遮罩"
+    }
+  },
+  "190": {
+    "inputs": {
+      "seed": 1082981151441268,
+      "steps": 8,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "236",
+        0
+      ],
+      "positive": [
+        "191",
+        0
+      ],
+      "negative": [
+        "191",
+        1
+      ],
+      "latent_image": [
+        "197",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "K采样器"
+    }
+  },
+  "191": {
+    "inputs": {
+      "strength": 1,
+      "start_percent": 0,
+      "end_percent": 1,
+      "positive": [
+        "192",
+        0
+      ],
+      "negative": [
+        "234",
+        0
+      ],
+      "control_net": [
+        "122",
+        0
+      ],
+      "vae": [
+        "8",
+        0
+      ],
+      "image": [
+        "185",
+        0
+      ],
+      "mask": [
+        "188",
+        0
+      ]
+    },
+    "class_type": "ControlNetInpaintingAliMamaApply",
+    "_meta": {
+      "title": "ControlNet应用_阿里妈妈局部重绘"
+    }
+  },
+  "192": {
+    "inputs": {
+      "text": [
+        "237",
+        0
+      ],
+      "clip": [
+        "5",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP文本编码器"
+    }
+  },
+  "195": {
+    "inputs": {
+      "pixels": [
+        "185",
+        0
+      ],
+      "vae": [
+        "8",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAE编码"
+    }
+  },
+  "197": {
+    "inputs": {
+      "amount": [
+        "238",
+        0
+      ],
+      "samples": [
+        "189",
+        0
+      ]
+    },
+    "class_type": "RepeatLatentBatch",
+    "_meta": {
+      "title": "复制Latent批次"
+    }
+  },
+  "198": {
+    "inputs": {
+      "samples": [
+        "190",
+        0
+      ],
+      "vae": [
+        "8",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE解码"
+    }
+  },
+  "199": {
+    "inputs": {
+      "filename_prefix": "4_crop_1344x1024",
+      "images": [
+        "198",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "保存图像"
+    }
+  },
+  "234": {
+    "inputs": {
+      "text": "相框、畫框、黑框、邊框、裝飾框、內框、外框、邊緣線、文字、標誌、logo、改變原圖、裁切主體、重繪原圖",
+      "clip": [
+        "5",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP文本编码器"
+    }
+  },
+  "236": {
+    "inputs": {
+      "anything": [
+        "114",
+        0
+      ]
+    },
+    "class_type": "easy cleanGpuUsed",
+    "_meta": {
+      "title": "清理GPU占用"
+    }
+  },
+  "237": {
+    "inputs": {
+      "value": "精細，無縫自然填充黑底部分，保持構圖、特徵、光線、背景、顏色不變。\n只延伸原圖邊緣的原有背景，填充黑色空白區域。\n不要生成相框、黑框、邊框、裝飾框、畫框、內框或外框，不要改動原圖內容。"
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "Text (Multiline)"
+    }
+  },
+  "238": {
+    "inputs": {
+      "value": 1
+    },
+    "class_type": "Int",
+    "_meta": {
+      "title": "整数"
+    }
+  },
+  "229": {
+    "inputs": {
+      "value": 0
+    },
+    "class_type": "Int",
+    "_meta": {
+      "title": "左裁像素"
+    }
+  },
+  "230": {
+    "inputs": {
+      "value": 0
+    },
+    "class_type": "Int",
+    "_meta": {
+      "title": "右裁像素"
+    }
+  },
+  "231": {
+    "inputs": {
+      "value": 0
+    },
+    "class_type": "Int",
+    "_meta": {
+      "title": "上裁像素"
+    }
+  },
+  "232": {
+    "inputs": {
+      "value": 0
+    },
+    "class_type": "Int",
+    "_meta": {
+      "title": "下裁像素"
+    }
+  },
+  "243": {
+    "inputs": {
+      "crop_left": [
+        "229",
+        0
+      ],
+      "crop_right": [
+        "230",
+        0
+      ],
+      "crop_bottom": [
+        "232",
+        0
+      ],
+      "crop_top": [
+        "231",
+        0
+      ],
+      "images": [
+        "144",
+        0
+      ]
+    },
+    "class_type": "ComfyUI_Image_Round__ImageCropAdvanced",
+    "_meta": {
+      "title": "Crop Image (Advanced)"
+    }
+  }
+}

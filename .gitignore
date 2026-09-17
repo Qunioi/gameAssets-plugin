@@ -1,0 +1,10 @@
+config.json
+config.local.json
+temp_uploads/
+outputs/
+__pycache__/
+*.py[cod]
+.venv/
+dist/
+*.zip
+.DS_Store
