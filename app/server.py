@@ -8,10 +8,12 @@ import math
 import mimetypes
 import os
 import re
+import socket
 import ssl
 import tempfile
 import threading
 import time
+import webbrowser
 import zipfile
 from contextlib import nullcontext
 import urllib.error
@@ -1984,7 +1986,7 @@ class RequestHandler(BaseHTTPRequestHandler):
 
         try:
             resize_context = (
-                tempfile.TemporaryDirectory(prefix="gameassets-resize-", dir=BASE_DIR)
+                tempfile.TemporaryDirectory(prefix="gameassets-resize-")
                 if workflow_id in (COMBINED_CROP_WORKFLOW_ID, EDIT_WORKFLOW_ID) or resize_percent != 100
                 or edit_mask_rect is not None or edit_mask_image is not None
                 else nullcontext()
@@ -2068,7 +2070,7 @@ class RequestHandler(BaseHTTPRequestHandler):
             pattern=r"[0-9]{1,32}",
         )
 
-        with tempfile.TemporaryDirectory(prefix="gameassets-debug-export-", dir=BASE_DIR) as work_dir:
+        with tempfile.TemporaryDirectory(prefix="gameassets-debug-export-") as work_dir:
             main_path = (
                 _resize_image_for_workflow(file_path, resize_percent, work_dir)
                 if resize_percent != 100
@@ -2153,7 +2155,7 @@ class RequestHandler(BaseHTTPRequestHandler):
         raw_body = self._read_raw_upload()
 
         try:
-            with tempfile.TemporaryDirectory(prefix="gameassets-", dir=BASE_DIR) as temp_dir:
+            with tempfile.TemporaryDirectory(prefix="gameassets-") as temp_dir:
                 temp_file_path = os.path.join(temp_dir, file_name)
                 with open(temp_file_path, "wb") as temp_file:
                     temp_file.write(raw_body)
@@ -2501,13 +2503,53 @@ class RequestHandler(BaseHTTPRequestHandler):
                 exc.message,
             )
             self._send_json(exc.status_code, {"error": exc.message})
+        except Exception as exc:
+            # 未預期的例外若不回應，瀏覽器只會顯示 "Failed to fetch"，
+            # 因此記錄完整 traceback 並回傳錯誤訊息給前端。
+            LOGGER.exception("%s %s -> unhandled error", self.command, parsed_path.path)
+            try:
+                self._send_json(
+                    500, {"error": f"伺服器內部錯誤：{type(exc).__name__}: {exc}"}
+                )
+            except OSError:
+                LOGGER.debug("Unable to send error response")
 
 
-def run_server():
-    host = os.environ.get("GAME_ASSETS_HOST", "127.0.0.1")
-    port = _bounded_env_int("GAME_ASSETS_PORT", 8000, 1, 65535)
-    httpd = ThreadingHTTPServer((host, port), RequestHandler)
-    LOGGER.info("GameAssets server running on http://%s:%s", host, port)
+def find_lan_ip():
+    """Return this computer's LAN address, or None when it cannot be detected."""
+    probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        # No packet is sent; connect() only asks the OS which interface it would use.
+        probe.connect(("8.8.8.8", 80))
+        address = probe.getsockname()[0]
+    except OSError:
+        return None
+    finally:
+        probe.close()
+    return None if address.startswith("127.") else address
+
+
+def run_server(
+    open_browser=webbrowser.open,
+    find_ip=find_lan_ip,
+    server_class=ThreadingHTTPServer,
+):
+    # Port 0 lets the OS select an available port. Binding all interfaces makes
+    # the site reachable by coworkers on the same network.
+    host = os.environ.get("GAME_ASSETS_HOST", "").strip() or "0.0.0.0"
+    port = _bounded_env_int("GAME_ASSETS_PORT", 0, 1, 65535)
+    httpd = server_class((host, port), RequestHandler)
+    actual_port = httpd.server_address[1]
+    local_url = f"http://127.0.0.1:{actual_port}/"
+    lan_address = find_ip() if host in {"0.0.0.0", "::", ""} else None
+
+    print()
+    print(f"網站已啟動：{local_url}")
+    if lan_address:
+        print(f"同網段的同事可以用：http://{lan_address}:{actual_port}/")
+    print("關閉此視窗即停止網站")
+    open_browser(local_url)
+    LOGGER.info("GameAssets server listening on %s:%s", host, actual_port)
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
