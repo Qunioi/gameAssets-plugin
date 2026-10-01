@@ -36,8 +36,19 @@ REQUESTED_STORAGE_ROOT = (
     "/Volumes/CM1/行銷處/市場營銷部/0共用/04_Design/05_其它專案/"
     "icon整形專案/所有遊戲圖/(0)更新紀錄"
 )
+# 上面是 Mac 掛載路徑，Windows 上同一個資料夾是 Z:\...（realpath 後會變成 \\fileserver\cm1\...），
+# 寫死的 /Volumes 路徑在 Windows 上永遠對不到。改用「本程式所在位置」往上推回同一個資料夾，
+# 兩個平台都適用：app -> 遊戲圖整形助手 -> icon整形專案 -> 所有遊戲圖/(0)更新紀錄
+SIBLING_STORAGE_ROOT = os.path.join(
+    os.path.dirname(os.path.dirname(BASE_DIR)), "所有遊戲圖", "(0)更新紀錄"
+)
 
 DEFAULT_WORKFLOW_ID = "2084930502464638978"
+DEFAULT_OUTPAINT_PROMPT = (
+    "依照原圖邊緣的紋理、材質、光線與顏色，精細、無縫地向外延續原有背景。"
+    "僅自然填充新增的擴圖區域，保持原圖構圖、人物特徵、物件、光線、背景與顏色不變。"
+    "新增區域應與相鄰原圖自然銜接，不要生成純色底、粉紅色底、邊框、文字或新的人物。"
+)
 EDIT_WORKFLOW_ID = "2085215811236577281"
 SHRINK_WORKFLOW_ID = "2061658624203771906"
 COMBINED_CROP_WORKFLOW_ID = "2085291529685544962"
@@ -177,7 +188,7 @@ def _bounded_env_int(name, default, minimum, maximum):
 
 
 def _default_allowed_roots():
-    roots = [os.path.expanduser("~"), BASE_DIR, REQUESTED_STORAGE_ROOT]
+    roots = [os.path.expanduser("~"), BASE_DIR, REQUESTED_STORAGE_ROOT, SIBLING_STORAGE_ROOT]
     # Apache's macOS document root is commonly used as the project storage
     # volume. Only enable it when this server itself is running inside it.
     for candidate in ("/Library/WebServer/Documents", "/var/www", "/var/www/html"):
@@ -270,14 +281,30 @@ def _validated_identifier(value, field_name, default, pattern=r"[A-Za-z0-9_.-]{1
     return value
 
 
-def _validated_path(value, field_name, *, directory=False, image=False, allow_missing=False):
+def _validated_path(value, field_name, *, directory=False, image=False, allow_missing=False,
+                    staging_root=None):
     value = _require_text(value, field_name, max_length=4096)
+    # Windows 檔案總管「複製為路徑」會在前後加上雙引號
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+        value = value[1:-1].strip()
     expanded_path = os.path.expanduser(value)
     if not os.path.isabs(expanded_path):
         raise RequestError(400, f"{field_name} must be an absolute path")
 
     resolved_path = os.path.realpath(os.path.abspath(expanded_path))
-    if not _is_within_allowed_root(resolved_path):
+    # Only server-created staging directories may extend the path boundary.
+    # Resolve symlinks so a staged file cannot escape this specific directory.
+    within_staging_root = False
+    if staging_root is not None:
+        resolved_staging_root = os.path.realpath(os.path.abspath(staging_root))
+        try:
+            within_staging_root = (
+                os.path.commonpath((resolved_path, resolved_staging_root))
+                == resolved_staging_root
+            )
+        except ValueError:
+            pass
+    if not _is_within_allowed_root(resolved_path) and not within_staging_root:
         raise RequestError(403, f"{field_name} is outside the allowed folders")
 
     if allow_missing:
@@ -1078,8 +1105,8 @@ def run_runninghub_api(
     raise UpstreamError("Unable to reach RunningHub")
 
 
-def upload_media_to_runninghub(file_path, api_key):
-    file_path = _validated_path(file_path, "file", image=True)
+def upload_media_to_runninghub(file_path, api_key, *, staging_root=None):
+    file_path = _validated_path(file_path, "file", image=True, staging_root=staging_root)
     try:
         file_size = os.path.getsize(file_path)
         if file_size > MAX_UPLOAD_BYTES:
@@ -1269,6 +1296,65 @@ def _prepare_edit_mask_input(file_path, mask_rect, mask_image_bytes, output_dir)
     return output_path
 
 
+def _outpaint_background_overrides(file_path):
+    """Replace the workflow's magenta staging color with the image edge color."""
+    if Image is None or ImageOps is None:
+        raise RequestError(503, "Pillow is required for image outpainting")
+    try:
+        with Image.open(file_path) as source:
+            image = ImageOps.exif_transpose(source).convert("RGB")
+            width, height = image.size
+            canvas_width = ((width + 320 + 7) // 8) * 8
+            pixels = []
+            for box in ((0, 0, width, 1), (0, height - 1, width, height),
+                        (0, 0, 1, height), (width - 1, 0, width, height)):
+                pixels.extend(image.crop(box).resize((32, 1)).getdata())
+            channels = [round(sum(pixel[i] for pixel in pixels) / len(pixels))
+                        for i in range(3)]
+            color = "#" + "".join(f"{channel:02X}" for channel in channels)
+    except (OSError, ValueError) as exc:
+        raise RequestError(400, "Unable to read outpainting image edges") from exc
+    overrides = [
+        {"nodeId": node_id, "fieldName": field, "fieldValue": color}
+        for node_id, field in (("184", "color"), ("185", "background_color"),
+                               ("240", "background_color"))
+    ]
+    # Keep the source at its original scale and restrict edits to added sides.
+    overrides.extend([
+        {"nodeId": "239", "fieldName": "scale_by", "fieldValue": 1.0},
+        {"nodeId": "109", "fieldName": "feathering", "fieldValue": 0},
+        {"nodeId": "187", "fieldName": "expand", "fieldValue": 0},
+        {"nodeId": "188", "fieldName": "amount", "fieldValue": 0},
+        {"nodeId": "236", "fieldName": "value", "fieldValue": canvas_width},
+    ])
+    for node_id in ("185", "240"):
+        overrides.extend([
+            {"nodeId": node_id, "fieldName": "proportional_width", "fieldValue": canvas_width},
+            {"nodeId": node_id, "fieldName": "proportional_height", "fieldValue": height},
+        ])
+    overrides.append({"nodeId": "240", "fieldName": "scale_to_length", "fieldValue": canvas_width})
+    return overrides
+
+
+def _preserve_outpaint_source(target_path, original_path):
+    """Use generated pixels only at the sides; restore the original exactly."""
+    original_path = _validated_path(original_path, "originalPath", image=True)
+    if Image is None or ImageOps is None:
+        raise RequestError(503, "Pillow is required for image outpainting")
+    try:
+        with Image.open(original_path) as source, Image.open(target_path) as generated:
+            original = ImageOps.exif_transpose(source).convert("RGBA")
+            width, height = original.size
+            canvas_width = ((width + 320 + 7) // 8) * 8
+            result = generated.convert("RGBA").resize(
+                (canvas_width, height), Image.Resampling.LANCZOS
+            )
+            result.paste(original, ((canvas_width - width) // 2, 0))
+            result.save(target_path, format="PNG")
+    except (OSError, ValueError) as exc:
+        raise RequestError(500, "Unable to preserve original outpainting image") from exc
+
+
 def make_node_info_list(
     workflow_id,
     node_id,
@@ -1305,13 +1391,16 @@ def make_node_info_list(
         nodes = [
             {"nodeId": str(node_id), "fieldName": field_name, "fieldValue": remote_file_name}
         ]
+    if str(workflow_id) == DEFAULT_WORKFLOW_ID:
+        prompt_text = prompt_text or DEFAULT_OUTPAINT_PROMPT
+        prompt_node_id = "238"
     if prompt_text and str(workflow_id) != COMBINED_CROP_WORKFLOW_ID:
         nodes.append(
             {
                 "nodeId": str(prompt_node_id),
                 "fieldName": (
                     "value"
-                    if str(workflow_id) == COMBINED_CROP_WORKFLOW_ID
+                    if str(workflow_id) == DEFAULT_WORKFLOW_ID
                     else "prompt"
                 ),
                 "fieldValue": prompt_text,
@@ -2004,13 +2093,17 @@ class RequestHandler(BaseHTTPRequestHandler):
                     if resize_dir
                     else file_path
                 )
-            upload_response = upload_media_to_runninghub(upload_path, api_key)
+            upload_response = upload_media_to_runninghub(
+                upload_path, api_key, staging_root=resize_dir
+            )
             masked_remote_file_name = None
             if workflow_id == EDIT_WORKFLOW_ID:
                 masked_path = _prepare_edit_mask_input(
                     upload_path, edit_mask_rect, edit_mask_image, resize_dir
                 )
-                masked_response = upload_media_to_runninghub(masked_path, api_key)
+                masked_response = upload_media_to_runninghub(
+                    masked_path, api_key, staging_root=resize_dir
+                )
                 if masked_response.get("code") not in (0, "0"):
                     raise UpstreamError(_response_message(masked_response, "Edit mask upload failed"))
                 masked_data = masked_response.get("data")
@@ -2029,6 +2122,8 @@ class RequestHandler(BaseHTTPRequestHandler):
             if not isinstance(remote_file_name, str) or not remote_file_name.strip():
                 raise UpstreamError("RunningHub did not return an uploaded file name")
 
+            if workflow_id == DEFAULT_WORKFLOW_ID:
+                node_overrides.extend(_outpaint_background_overrides(upload_path))
             node_info_list = make_node_info_list(
                 workflow_id,
                 node_id,
@@ -2169,7 +2264,9 @@ class RequestHandler(BaseHTTPRequestHandler):
                         resize_percent,
                         temp_dir,
                     )
-                upload_response = upload_media_to_runninghub(upload_path, api_key)
+                upload_response = upload_media_to_runninghub(
+                    upload_path, api_key, staging_root=temp_dir
+                )
                 if upload_response.get("code") not in (0, "0"):
                     raise UpstreamError(
                         _response_message(upload_response, "Image upload failed")
@@ -2185,7 +2282,9 @@ class RequestHandler(BaseHTTPRequestHandler):
                     masked_path = _prepare_edit_mask_input(
                         upload_path, edit_mask_rect, None, temp_dir
                     )
-                    masked_response = upload_media_to_runninghub(masked_path, api_key)
+                    masked_response = upload_media_to_runninghub(
+                        masked_path, api_key, staging_root=temp_dir
+                    )
                     if masked_response.get("code") not in (0, "0"):
                         raise UpstreamError(
                             _response_message(masked_response, "Edit mask upload failed")
@@ -2200,6 +2299,8 @@ class RequestHandler(BaseHTTPRequestHandler):
                         raise UpstreamError(
                             "RunningHub did not return an edit mask file name"
                         )
+                if workflow_id == DEFAULT_WORKFLOW_ID:
+                    node_overrides.extend(_outpaint_background_overrides(upload_path))
                 node_info_list = make_node_info_list(
                     workflow_id,
                     node_id,
@@ -2432,6 +2533,8 @@ class RequestHandler(BaseHTTPRequestHandler):
                     _download_remote_file(image_url, target_path, target_fd)
                     if workflow_mode == "crop-combined":
                         _normalize_crop_download(target_path)
+                    elif workflow_mode == "outpaint":
+                        _preserve_outpaint_source(target_path, original_path)
                 except (RequestError, OSError):
                     try:
                         os.remove(target_path)

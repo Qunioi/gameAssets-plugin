@@ -1,39 +1,39 @@
 @echo off
-:: 遊戲整形 Web UI：Windows 啟動檔
-:: 注意：本檔必須以 CRLF 換行、UTF-8 無 BOM 儲存，否則 cmd 會讀錯行
-:: 注意：中文訊息不要放進 ( ) 區塊內，也不要使用全形驚嘆號，UTF-8 下 cmd 會讀錯行
-chcp 65001 >nul
-title 遊戲整形 Web UI
+:: �C����� Web UI�GWindows �Ұ���
+:: �`�N�G���ɥ����H CRLF ����BBig5 (cp950) �s�X�x�s�A���n�令 UTF-8
+:: ��]�Gcmd �b chcp 65001 (UTF-8) �UŪ���� bat �|������A�s Python �������|�a��
+:: �`�N�G����T�����n��i ( ) �϶���
+title �C����� Web UI
 
-:: 偵測 Python：依序實際執行一次，避開 Microsoft Store 的空殼 python / python3，並要求 3.7 以上
+:: ���� Python�G�̧ǹ�ڰ���@���A�׶} Microsoft Store ���Ŵ� python / python3�A�ín�D 3.7 �H�W
 set "py_cmd="
 for %%P in (py python python3) do (
     if not defined py_cmd (
-        %%P -c "import sys; sys.exit(sys.version_info[:2] ^< (3, 7))" >nul 2>nul && set "py_cmd=%%P"
+        %%P -c "import sys; sys.exit(sys.version_info[:2] < (3, 7))" >nul 2>nul && set "py_cmd=%%P"
     )
 )
 if not defined py_cmd goto no_python
 
-:: 以本檔所在位置找 app，從任何位置雙擊都能執行；伺服器會自動選擇可用連接埠並開啟瀏覽器
+:: �H���ɩҦb��m�� app�A�q�����m�����������F���A���|�۰ʿ�ܥi�γs����ö}���s����
 %py_cmd% "%~dp0app\server.py"
 if errorlevel 1 goto app_failed
 exit /b 0
 
 :no_python
-echo 錯誤: 這台電腦找不到 Python 3.7 以上的版本，網站無法啟動。
+echo ���~: �o�x�q���䤣�� Python 3.7 �H�W�������A�����L�k�ҰʡC
 echo.
-echo 請到下列網址下載並安裝 Python：
+echo �Ш�U�C���}�U���æw�� Python�G
 echo   https://www.python.org/downloads/
-echo 安裝時第一個畫面要勾選「Add python.exe to PATH」，裝好後再雙擊本檔一次。
-echo 詳細操作方式請看同一個資料夾裡的「使用方法.txt」。
+echo �w�ˮɲĤ@�ӵe���n�Ŀ�uAdd python.exe to PATH�v�A�˦n��A�������ɤ@���C
+echo �ԲӾާ@�覡�ЬݦP�@�Ӹ�Ƨ��̪��u�ϥΤ�k.txt�v�C
 goto wait_exit
 
 :app_failed
 echo.
-echo 網站已停止。如果上方有錯誤訊息，請截圖提供給維護者。
+echo �����w����C�p�G�W�観���~�T���A�кI�ϴ��ѵ����@�̡C
 
 :wait_exit
 echo.
-echo 按任意鍵關閉此視窗...
+echo �����N������������...
 pause >nul
 exit /b 1

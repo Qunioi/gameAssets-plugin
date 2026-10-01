@@ -433,10 +433,10 @@
             <input id="output-dir-input" type="hidden" value="">
 
             <div id="image-source-section" class="pt-4 border-t border-[var(--color-border)] flex flex-col gap-3">
-                <!-- 目錄設定：預設收合，點擊工作流分頁旁的「目錄」按鈕展開／收合。
+                <!-- 目錄設定：預設展開，點擊工作流分頁旁的「目錄」按鈕展開／收合。
                      手動模式的輸入列一律顯示，不受此面板收合影響（維持原本行為）；
                      自動模式的輸入列跟著這個面板一起收合，收合後只留下下方的掃描目標預覽文字。 -->
-                <div id="directory-mode-panel" class="hidden flex flex-col gap-3">
+                <div id="directory-mode-panel" class="flex flex-col gap-3">
                     <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 text-xs">
                         <div class="flex items-center bg-[var(--color-neutral-soft)] rounded-lg p-0.5 border border-[var(--color-border)] w-fit">
                             <button type="button" id="directory-mode-manual-btn" onclick="switchDirectoryMode('manual')" class="px-3 py-1.5 rounded-[var(--radius-control)] font-semibold transition">手動</button>
@@ -445,7 +445,7 @@
                         <span class="text-[var(--color-text-muted)]">手動：直接貼上要掃描的資料夾路徑。自動：貼上專案根目錄，系統會自動加上 collected_icons，並依目前選擇的工作流掃描對應的上一步輸出資料夾。</span>
                     </div>
                     <!-- 自動模式的路徑輸入列：跟著面板一起收合／展開，歷史紀錄與手動模式共用同一套下拉樣式。 -->
-                    <div id="directory-auto-input-row" class="hidden flex-col sm:flex-row gap-3">
+                    <div id="directory-auto-input-row" class="flex flex-col sm:flex-row gap-3">
                         <div class="flex-1 relative">
                             <input id="project-path-input" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-autocomplete="none" oninput="updateAutoScanPreview()" onclick="toggleProjectPathHistoryDropdown(event)" placeholder="貼上專案根目錄路徑" class="w-full bg-white border border-[var(--color-border)] rounded-[var(--radius-control)] px-4 pr-10 h-11 text-xs font-mono outline-none transition">
                             <div onclick="toggleProjectPathHistoryDropdown(event)" class="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer p-1 text-[var(--color-text-subtle)] hover:text-[var(--color-primary)]"><i data-lucide="chevron-down" class="w-4 h-4"></i></div>
@@ -456,7 +456,7 @@
                 </div>
 
                 <!-- 手動模式：貼上實際要掃描的資料夾路徑，永遠顯示，不受面板收合影響（原本行為，切換 step1~4 時路徑不會變）。 -->
-                <div id="directory-manual-row" class="flex flex-col sm:flex-row gap-3 relative">
+                <div id="directory-manual-row" class="hidden flex flex-col sm:flex-row gap-3 relative">
                     <div class="flex-1 relative"><input id="directory-input" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-autocomplete="none" oninput="autoDeduceOutputDir(this.value)" onclick="toggleHistoryDropdown(event)" placeholder="貼上欲執行目錄路徑" class="w-full bg-white border border-[var(--color-border)] rounded-[var(--radius-control)] px-4 pr-10 h-11 text-xs font-mono outline-none transition"><div onclick="toggleHistoryDropdown(event)" class="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer p-1 text-[var(--color-text-subtle)] hover:text-[var(--color-primary)]"><i data-lucide="chevron-down" class="w-4 h-4" id="dropdown-arrow"></i></div><div id="history-dropdown" class="path-history-dropdown hidden absolute top-full left-0 right-0 mt-2 bg-white border border-[var(--color-border)] rounded-[var(--radius-control)] shadow-lg z-50 overflow-hidden"></div></div><button onclick="scanDirectory()" class="btn btn-lg btn-primary button-lift"><i data-lucide="search" class="w-4 h-4"></i>掃描目錄</button>
                 </div>
 
@@ -708,6 +708,7 @@
             lucide.createIcons();
         }
         let currentWorkflowMode = localStorage.getItem('rh_workflow_mode') || 'outpaint'; // 預設 'outpaint' (擴圖模式)
+        let currentDirectoryMode = 'auto'; // 每次開啟頁面，預設選中自動模式。
         if (!['upscale', 'edit', 'outpaint', 'crop'].includes(currentWorkflowMode)) {
             currentWorkflowMode = 'outpaint';
         }
@@ -1768,11 +1769,6 @@
                 if (logPanel && !logPanel.classList.contains('hidden') && !path.includes(logPanel) && !path.includes(logBtn)) {
                     logPanel.classList.add('hidden');
                 }
-                const dirModePanel = document.getElementById('directory-mode-panel');
-                const dirModeBtn = document.getElementById('directory-mode-toggle-btn');
-                if (dirModePanel && !dirModePanel.classList.contains('hidden') && !path.includes(dirModePanel) && !path.includes(dirModeBtn)) {
-                    dirModePanel.classList.add('hidden');
-                }
             });
         });
 
@@ -2100,21 +2096,33 @@
             }
         }
 
+        // 同時支援 Mac（/）與 Windows（\）路徑：去掉前後空白、「複製為路徑」帶的引號與結尾分隔符號
+        function cleanInputPath(inputPath) {
+            let cleanPath = (inputPath || '').trim();
+            if (/^(["']).*\1$/.test(cleanPath)) cleanPath = cleanPath.slice(1, -1).trim();
+            return cleanPath.replace(/[\/\\]+$/, '');
+        }
+
+        function getPathSeparator(path) {
+            return /^[A-Za-z]:\\|^\\\\/.test(path) || (path.includes('\\') && !path.includes('/')) ? '\\' : '/';
+        }
+
         function autoDeduceOutputDir(inputPath) {
             if (!inputPath) return;
             const outputDirInput = document.getElementById('output-dir-input');
-            let cleanPath = inputPath.trim().replace(/\/+$/, '');
+            const cleanPath = cleanInputPath(inputPath);
             const preset = WORKFLOW_PRESETS[currentWorkflowMode] || WORKFLOW_PRESETS.outpaint;
             const targetLeaf = preset.outputDir;
 
             let deduced = '';
             if (/step\d+/i.test(cleanPath)) {
                 deduced = cleanPath
-                    .replace(/step\d+[^\/]*$/, targetLeaf)
-                    .replace(/step\d+[^\/]*\//, `${targetLeaf}/`);
+                    .replace(/step\d+[^\/\\]*$/, targetLeaf)
+                    .replace(/step\d+[^\/\\]*([\/\\])/, `${targetLeaf}$1`);
             } else {
-                deduced = cleanPath.replace(/[^\/]+$/, targetLeaf);
+                deduced = cleanPath.replace(/[^\/\\]+$/, targetLeaf);
             }
+            if (deduced === targetLeaf) deduced = '';
             outputDirInput.value = deduced;
             
             console.log(`[AutoDeduce] Mode: ${currentWorkflowMode} | Input: ${cleanPath} => OutputDir: ${deduced}`);
@@ -2139,13 +2147,14 @@
         }
 
         function getAutoScanPath(projectPath) {
-            const cleanPath = (projectPath || '').trim().replace(/\/+$/, '');
+            const cleanPath = cleanInputPath(projectPath);
             if (!cleanPath) return '';
-            return `${cleanPath}/${AUTO_SCAN_COLLECTED_ICONS_FOLDER}/${getAutoScanInputFolder()}`;
+            const sep = getPathSeparator(cleanPath);
+            return [cleanPath, AUTO_SCAN_COLLECTED_ICONS_FOLDER, getAutoScanInputFolder()].join(sep);
         }
 
         function getDirectoryMode() {
-            return localStorage.getItem('rh_directory_mode') === 'auto' ? 'auto' : 'manual';
+            return currentDirectoryMode;
         }
 
         function toggleDirectoryModePanel() {
@@ -2156,7 +2165,7 @@
 
         function switchDirectoryMode(mode) {
             if (mode !== 'auto' && mode !== 'manual') mode = 'manual';
-            localStorage.setItem('rh_directory_mode', mode);
+            currentDirectoryMode = mode;
             updateDirectoryModeUI();
             if (mode === 'auto') {
                 updateAutoScanPreview();
